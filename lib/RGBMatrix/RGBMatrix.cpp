@@ -19,7 +19,7 @@
 #define DATA_PIN    13
 #define NUM_LEDS    200
 #define BRIGHTNESS  150
-#define FPS         2         // Try no to go over 165
+#define FPS         5         // Try no to go over 165
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
 
@@ -79,19 +79,28 @@ public:
     }
     
     void mode_rain() {
-        // Shift everythign down
+
+        h0 = 130; // Rain Color
+        h0 = 90; // Matrix Green
+
+        // Shift everything down
         shiftBoxesDown();
 
         // Set whole top row low blue
         for (int i = 0; i < BOX_WIDTH; i++) {
-            boxCHSV[i][0] = 150;
+            boxCHSV[i][0] = h0 + 35;
             boxCHSV[i][1] = 200;
             boxCHSV[i][2] = 90;
         }
 
+        // Higher number means less events
+        int rand = random(15);
 
-        // Randomly set one of the top rows of boxes
-        boxCHSV[random(3)][2] = 254;
+        if (rand < BOX_WIDTH) {
+            boxCHSV[rand][0] = h0 + random(40);
+            // Randomly set one of the top rows of boxes
+            boxCHSV[rand][2] = 254;
+        } 
 
         // Render it!
         renderBoxHues();
@@ -181,10 +190,11 @@ public:
     }
 
     void shiftBoxesDown() {
-        for (int i = 0; i <= NUM_BOXES - BOX_WIDTH; i++) {
-            boxCHSV[i + BOX_WIDTH][0] = boxCHSV[i][0];
-            boxCHSV[i + BOX_WIDTH][1] = boxCHSV[i][1];
-            boxCHSV[i + BOX_WIDTH][2] = boxCHSV[i][2];
+        // TODO: Save the last row and use it to fill the first row
+        for (int i = NUM_BOXES; i >= 0 + BOX_WIDTH; i--) {
+            boxCHSV[i][0] = boxCHSV[i - BOX_WIDTH][0];
+            boxCHSV[i][1] = boxCHSV[i - BOX_WIDTH][1];
+            boxCHSV[i][2] = boxCHSV[i - BOX_WIDTH][2];
         }
     }
 
