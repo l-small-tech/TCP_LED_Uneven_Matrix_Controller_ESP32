@@ -13,15 +13,15 @@
 #include <FastLED.h>
 #include <Arduino.h>
 
+#include "PixelMapping.h"
+
 // ---- Parameters ----
 #define DATA_PIN    13
 #define NUM_LEDS    200
 #define BRIGHTNESS  150
-#define FPS         5
+#define FPS         2         // Try no to go over 165
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
-
-
 
 class RGBMatrix {
     
@@ -32,10 +32,24 @@ private:
     int fps = FPS;
     int brightness = BRIGHTNESS;
 
-    enum class matrixModes : uint8_t { m_static, flash };
-    matrixModes mode = matrixModes::m_static;
+    enum class matrixModes : uint8_t { experimental,
+                                       rain,
+                                       rainbow_row_down,
+                                       rainbow_boxes,
+                                       spiral,
+                                       solid_color
+                                     };
+    // Default mode
+    matrixModes mode = matrixModes::rain;
+
+    // For debugging frame rate
+    bool skip_frame = true;
     
-    int r, g, b = 0;
+    int r0, g0, b0 = 0;
+    int h0, s0, v0 = 254;
+    bool is_on = true;
+    int boxIndex = 0;
+    int index = 0;
 
     unsigned long thisTime;
     unsigned long lastTime = 0;
@@ -43,28 +57,78 @@ private:
 public:
 
     RGBMatrix() {
-        FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+        FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS).setCorrection( Typical8mmPixel  );
         FastLED.setBrightness(brightness);
+        setStripColor(0, 0, 0);
+    }
+
+    void mode_rainbow_row_down() {
+        setBoxColor(index, CHSV(h0, s0, v0));
+        setBoxColor(index + 1, CHSV(h0, s0, v0));
+        setBoxColor(index + 2, CHSV(h0, s0, v0));
+
+        index += 3;
+        if (index >= NUM_BOXES - 2) {
+            index = 0;
+            h0 = (h0 + 15) % 255;
+        }
+    }
+
+    void mode_experimental() {
+
     }
     
-    void off() {
-        // Save the state of the strip
-        for (int i = 0; i < NUM_LEDS; i++) {
-            leds_bkp[i] = leds[i];
+    void mode_rain() {
+        // Shift everythign down
+        shiftBoxesDown();
+
+        // Set whole top row low blue
+        for (int i = 0; i < BOX_WIDTH; i++) {
+            boxCHSV[i][0] = 150;
+            boxCHSV[i][1] = 200;
+            boxCHSV[i][2] = 90;
         }
 
-        // Turn all the lights off
-        for (int i = 0; i < NUM_LEDS; i++) {
-            leds[i] = CRGB::Black;
-        }
+
+        // Randomly set one of the top rows of boxes
+        boxCHSV[random(3)][2] = 254;
+
+        // Render it!
+        renderBoxHues();
     }
 
-    void on() {
-        // Set all LEDs to the state they had before beign turned off        
-        for (int i = 0; i < NUM_LEDS; i++) {
-            leds[i] = leds_bkp[i];
-        }
+    void mode_rainbow_boxes() {
+        setBoxColor(boxIndex, CHSV(h0, 254, 254));
+
+        boxIndex = (boxIndex + 1) % NUM_BOXES;
+        h0 = (h0 + 40) % 255;
     }
+
+    void mode_spiral() {
+
+        // Lead dog
+        boxCHSV[ spiralOrder[ (boxIndex + 1) % NUM_BOXES ] ][0] = h0;
+        boxCHSV[ spiralOrder[ (boxIndex + 1) % NUM_BOXES ] ][1] = 254;
+        boxCHSV[ spiralOrder[ (boxIndex + 1) % NUM_BOXES ] ][2] = 254;
+
+        // Lagger
+        boxCHSV[ spiralOrder[boxIndex] ][0] = h0;
+        boxCHSV[ spiralOrder[boxIndex] ][1] = 0;
+        boxCHSV[ spiralOrder[boxIndex] ][2] = 0;
+
+        // Render and increment
+        renderBoxHues();
+        boxIndex = (boxIndex + 1) % NUM_BOXES;
+        h0 = (h0 + 10) % 255;
+    }
+
+    void mode_solid_color() {
+        setStripColor(r0, g0, b0);
+    }
+    
+    void off() { is_on = false; }
+
+    void on() { is_on = true; }
 
     void push(int r, int g, int b) {
         // Set first led to color
@@ -81,6 +145,22 @@ public:
         }
     }
     
+    void renderBoxHues() {
+        for (int i = 0; i < NUM_BOXES; i++) {
+            setBoxColor(i, CHSV(boxCHSV[i][0], boxCHSV[i][1], boxCHSV[i][2]));
+        }
+    }
+
+    void setBoxColor(int boxIndex, CHSV color) {
+            
+        for (int i = 0; i < MAX_PIXELS_PER_BOX; i++) {
+
+            if (pixelMap_boxes[boxIndex][i] == -1) { break; }
+
+            leds[pixelMap_boxes[boxIndex][i]] = color;
+        }
+    }
+
     void setBrightness(int b) {
 
         this->brightness = b;
@@ -100,42 +180,38 @@ public:
         }
     }
 
+    void shiftBoxesDown() {
+        for (int i = 0; i <= NUM_BOXES - BOX_WIDTH; i++) {
+            boxCHSV[i + BOX_WIDTH][0] = boxCHSV[i][0];
+            boxCHSV[i + BOX_WIDTH][1] = boxCHSV[i][1];
+            boxCHSV[i + BOX_WIDTH][2] = boxCHSV[i][2];
+        }
+    }
+
     void tick() {
         thisTime = millis();
-        if (thisTime - lastTime > 1000 / fps) {
+        if (thisTime - lastTime > 1000 / fps && is_on) {
+
+            // You were ready to quick?
+            if (!skip_frame) {
+                Serial.println("WARNING: Frame rate may be too high!");
+            }
             
             // Run mode code
             switch (mode) {
-                // Satic Mode: Lights are on and they don't move
-                case matrixModes::m_static: {
-                    Serial.println("DEBUG: Static mode Tick");
-                    break;
-                }
-
-                // Flash that silly goose
-                case matrixModes::flash: {
-                    Serial.println("Flash Tick");
-                    break;
-                }
+                case matrixModes::experimental: { mode_experimental(); break; }
+                case matrixModes::rain: { mode_rain(); break; }
+                case matrixModes::rainbow_row_down: { mode_rainbow_row_down(); break; }
+                case matrixModes::rainbow_boxes: { mode_rainbow_boxes(); break; }
+                case matrixModes::spiral: { mode_spiral(); break; }
+                case matrixModes::solid_color: { mode_solid_color(); break; }
             }
 
             lastTime = thisTime;
             FastLED.show();
+            skip_frame = false;
+        } else {
+            skip_frame = true;
         }
     }
 };
-
-    // // Function Pointer Array Demo
-    // typedef void (*farray)();
-    // farray modes[5] = {NULL};
-
-    // // modes[0] = &test;
-    // modes[0] = []() {
-    //     cout << "Test anon" << endl;
-    // };
-
-    // modes[1] = []() {
-    //     cout << "Anon #2" << endl;
-    // };
-
-    // modes[1]();

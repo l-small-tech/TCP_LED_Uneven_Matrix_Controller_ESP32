@@ -12,15 +12,12 @@ void ledThreadFunc( void* pvParameters ) {  while (true) { strip->tick(); } }
 
 void wifiThreadFunc( void* pvParameters ) { 
   while (true) {
-    strip->setMode(0);
-    delay(2000);
-    strip->setMode(1);
-    delay(2000);
   }
 }
 
 void setup() {
   Serial.begin(115200);
+  // delay(2000);
   strip = new RGBMatrix();
   
   xTaskCreatePinnedToCore(
