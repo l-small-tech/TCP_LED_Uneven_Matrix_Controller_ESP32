@@ -2,14 +2,6 @@
 #define RGBMATRIX_CPP
 #endif
 
-/*
-    White High density Strip: BTF-LIGHTING RGBW RGBNW Natural White SK6812 (Similar WS2812B)
-    Black Lower Density Strip: SK6812 RGBW RGB Warm RGBNW Led Strip
-
-    On the Wemos D1 Mini, Use D7 as the Data Pin. D7 == GPIO 13 == MOSI
-    Use 430-470 Ohm with the data pin
-*/
-
 #include <FastLED.h>
 #include <Arduino.h>
 
@@ -22,6 +14,8 @@
 #define FPS         5         // Try no to go over 165
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
+
+// TODO: Convert this class to RGBStrpGrid.cpp
 
 class RGBMatrix {
     
