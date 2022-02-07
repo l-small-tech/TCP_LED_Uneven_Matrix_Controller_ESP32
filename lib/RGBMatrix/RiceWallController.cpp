@@ -171,7 +171,11 @@ public:
         }
     }
 
-    // Strip Methods
+    // Strip Methods 
+    void setHue(uint8_t hue) {
+        global_hue = hue;
+    }
+    
     void setStripColor(CHSV color) {
         for (int i = 0; i < FLED_LED_COUNT; i++) {
             leds[i] = color;

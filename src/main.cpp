@@ -6,6 +6,7 @@
 #include <esp_task_wdt.h>
 #include "secrets.h"
 
+#define TCP_BUFF_SIZE 2048
 
 RiceWallController* strip;
 
@@ -13,14 +14,19 @@ RiceWallController* strip;
 TaskHandle_t ledThread;
 TaskHandle_t wifiThread;
 
+// LED Controller thread
 void ledThreadFunc( void* pvParameters ) {
   
   while (true) { strip->tick(); } }
 
+// Wireless radio thread. Test with "netcat 10.1.1.82 8888"
 void wifiThreadFunc( void* pvParameters ) {
   	
   WiFiServer wifiServer(8888);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+  // Create and clear message buffer
+  char msgBuff[TCP_BUFF_SIZE];
 
   Serial.print("Connecting to WiFi...");
   while (WiFi.status() != WL_CONNECTED) {
@@ -34,25 +40,43 @@ void wifiThreadFunc( void* pvParameters ) {
   wifiServer.begin();
 
   while (true) {
+    // CLear message buffer
+    for (int i = 0; i < TCP_BUFF_SIZE; i++) { msgBuff[i] = '\0'; }
     WiFiClient client = wifiServer.available();
   
     if (client) {
-  
+
+      if(client.connected()) { Serial.println("Client Connected"); }
+      
+      int i = 0;
       while (client.connected()) {
-        
-        Serial.println("RX: ");
         while (client.available()>0) {
-          char c = client.read();
-          Serial.print(c);
+          msgBuff[i++] = client.read(); 
         }
-  
-        delay(10);
+        delay(1);
       }
-      Serial.println("End of RX");
   
+      Serial.println("Client disconnected, MSG:");
+      Serial.print(msgBuff);
+      Serial.println();
+
+      StaticJsonDocument<TCP_BUFF_SIZE> doc;
+      DeserializationError error = deserializeJson(doc, msgBuff);
+
+      if (error) {
+
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.f_str());
+        return;
+      }
+
+      if (doc.containsKey("hue")) {
+        strip->setHue(doc["hue"]);
+        Serial.print("Hue set to ");
+        Serial.println((int)doc["hue"]);
+      }
+
       client.stop();
-      Serial.println("Client disconnected");
-  
     }
   }
 }
