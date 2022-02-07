@@ -1,7 +1,11 @@
 #include <Arduino.h>
+#include <ArduinoJson.h>
+#include <WiFi.h>
 
 #include "RiceWallCOntroller.cpp"
 #include <esp_task_wdt.h>
+#include "secrets.h"
+
 
 RiceWallController* strip;
 
@@ -13,20 +17,43 @@ void ledThreadFunc( void* pvParameters ) {
   
   while (true) { strip->tick(); } }
 
-void wifiThreadFunc( void* pvParameters ) { 
-  // esp_task_wdt_init(30, false);      // Maybe needed if this task takes too long
+void wifiThreadFunc( void* pvParameters ) {
+  	
+  WiFiServer wifiServer(8888);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
 
-  // for (int i = 0; i < 21; i++) {
-  //   int rand = random(3);
-  //   if (rand == 0) {
-  //     strip->fillBox(i, CHSV(190 + random(30), 255, 255));
-  //   }
-  // }
+  Serial.print("Connecting to WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+ 
+  Serial.println("\nConnected to the WiFi network");
+  Serial.println(WiFi.localIP());
+ 
+  wifiServer.begin();
 
   while (true) {
-    // delay(100);
-    // strip->shiftBoxesDown();
-
+    WiFiClient client = wifiServer.available();
+  
+    if (client) {
+  
+      while (client.connected()) {
+        
+        Serial.println("RX: ");
+        while (client.available()>0) {
+          char c = client.read();
+          Serial.print(c);
+        }
+  
+        delay(10);
+      }
+      Serial.println("End of RX");
+  
+      client.stop();
+      Serial.println("Client disconnected");
+  
+    }
   }
 }
 
